@@ -11,8 +11,11 @@
 //be sure to change the definitions to match your own setup. Some pins such as DIO2,
 //DIO3, BUZZER may not be in used by this sketch so they do not need to be
 //connected and should be set to -1.
+
+// ********* SLEEP SETTINGS *************
 #define ENABLE_SLEEP_MODE
 
+// ********* RADIO SETTINGS ***************
 #define NSS 7
 #define RFBUSY 3
 #define NRESET A0
@@ -36,3 +39,16 @@ const uint8_t CodeRate = LORA_CR_4_5;            //LoRa coding rate
 const int8_t TXpower = 10;                       //Power for transmissions in dBm
 const uint16_t packet_delay = 100;              //mS delay between packets
 #define TXBUFFER_SIZE 32
+// ********* END OF RADIO SETTINGS ************
+
+
+// ********* DHT22 SETTINGS ****************
+#define DHTPIN 8                      // Changer le pin sur lequel est branché le DHT
+#define DHTTYPE DHT22                 // DHT 22  (AM2302)
+// ********* END OF DHT22 SETTINGS ****************
+
+
+// ********* AIR QUALITY SENSOR SETTINGS ****************
+#define QUALITY_TIME 300000           //Temps entre deux affichages des valeurs sonores et qualité de l'air
+#define QUALITY_SENSOR A3             //PIN Capteur qualité de l'air
+// ********* AIR QUALITY SENSOR SETTINGS ****************

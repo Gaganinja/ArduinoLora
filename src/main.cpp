@@ -24,33 +24,24 @@
 #define Program_Version "V1.0"
 
 
+
+#include <SPI.h>
+#include "DHT.h"
+// #include<AirQuality.h>
+
 #include <avr/wdt.h>                 //watchdog timer library, integral to Arduino IDE
 #include <avr/sleep.h>
-#include <SPI.h>
 // #include <LowPower.h>                //get the library here; https://github.com/rocketscream/Low-Power
 
 #include <SX128XLT.h>
 #include "Settings.h"
-
-SX128XLT LT;
-
-bool SendOK;
-int8_t TestPower;
-uint8_t TXPacketL;
-volatile byte sleep_cycles_remaining;
-// volatile bool wasInterrupted;
-
 
 
 /************************ Sleep Mode ******************************************/
 
 #if defined ENABLE_SLEEP_MODE
 
-// void wakeUp()
-// {
-//     wasInterrupted = true;
-//     sleep_cycles_remaining = 0;
-// }
+volatile byte sleep_cycles_remaining;
 
 ISR(WDT_vect)
 {
@@ -62,34 +53,15 @@ void sleepNode(unsigned int cycles)
     sleep_cycles_remaining = cycles;
     set_sleep_mode(SLEEP_MODE_PWR_DOWN); // sleep mode is set here
     sleep_enable();
-    // if (interruptPin != 255) {
-    //     wasInterrupted = false; //Reset Flag
-    //     //LOW,CHANGE, FALLING, RISING correspond with the values 0,1,2,3 respectively
-    //     attachInterrupt(interruptPin, wakeUp, INTERRUPT_MODE);
-    //     //if(INTERRUPT_MODE==0) attachInterrupt(interruptPin,wakeUp, LOW);
-    //     //if(INTERRUPT_MODE==1) attachInterrupt(interruptPin,wakeUp, RISING);
-    //     //if(INTERRUPT_MODE==2) attachInterrupt(interruptPin,wakeUp, FALLING);
-    //     //if(INTERRUPT_MODE==3) attachInterrupt(interruptPin,wakeUp, CHANGE);
-    // }
 
-    #if defined(__AVR_ATtiny25__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__)
-    WDTCR |= _BV(WDIE);
-    #else
     WDTCSR |= _BV(WDIE);
-    #endif
 
     while (sleep_cycles_remaining) {
         sleep_mode(); // System sleeps here
     }                 // The WDT_vect interrupt wakes the MCU from here
     sleep_disable();  // System continues execution here when watchdog timed out
-    // detachInterrupt(interruptPin);
 
-    #if defined(__AVR_ATtiny25__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__)
-    WDTCR &= ~_BV(WDIE);
-    #else
     WDTCSR &= ~_BV(WDIE);
-    #endif
-    // return !wasInterrupted;
 }
 
 void setup_watchdog(uint8_t prescalar)
@@ -99,29 +71,21 @@ void setup_watchdog(uint8_t prescalar)
     if (prescalar & 8)
         wdtcsr |= _BV(WDP3);
     MCUSR &= ~_BV(WDRF); // Clear the WD System Reset Flag
-
-    #if defined(__AVR_ATtiny25__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__)
-    WDTCR = _BV(WDCE) | _BV(WDE);           // Write the WD Change enable bit to enable changing the prescaler and enable system reset
-    WDTCR = _BV(WDCE) | wdtcsr | _BV(WDIE); // Write the prescalar bits (how long to sleep, enable the interrupt to wake the MCU
-    #else
     WDTCSR = _BV(WDCE) | _BV(WDE);           // Write the WD Change enable bit to enable changing the prescaler and enable system reset
     WDTCSR = _BV(WDCE) | wdtcsr | _BV(WDIE); // Write the prescalar bits (how long to sleep, enable the interrupt to wake the MCU
-    #endif
 }
-
 #endif // Enable sleep mode
 
-// void sleep1second(uint32_t sleeps)
-// {
-//   //uses the lowpower library
-//   uint32_t index;
+/************************ End of Sleep Mode *********************************/
 
-//   for (index = 1; index <= sleeps; index++)
-//   {
-//     LowPower.powerDown(SLEEP_1S, ADC_OFF, BOD_OFF);         //sleep in 1 second steps
-//   }
-// }
 
+SX128XLT LT;  // Creating Lora Transmitter object
+DHT dht(DHTPIN, DHTTYPE);
+
+
+bool SendOK;
+int8_t TestPower;
+uint8_t TXPacketL;
 
 void packet_is_OK()
 {
@@ -149,7 +113,7 @@ bool Send_Test_Packet1()
 {
   uint8_t bufffersize;
 
-  uint8_t buff[] = "Before Device Sleep";
+  uint8_t buff[] = "";
   TXPacketL = sizeof(buff);
   buff[TXPacketL - 1] = '*';
 
@@ -242,6 +206,7 @@ void setup()
   Serial.println(F("5_LoRa_TX_Sleep_Timed_Wakeup_Atmel Starting"));
 
   SPI.begin();
+  dht.begin();
 
   if (LT.begin(NSS, NRESET, RFBUSY, DIO1, DIO2, DIO3, RX_EN, TX_EN, LORA_DEVICE))
   {
@@ -268,6 +233,15 @@ void setup()
 
 void loop()
 {
+  float tmp = dht.readTemperature(false ,true);
+  float hum = dht.readHumidity();
+
+  Serial.print(F("TEMP : "));
+  Serial.print(tmp);
+  Serial.print(F("\t HUM : "));
+  Serial.println(hum);
+
+
   digitalWrite(LED1, HIGH);
   Serial.print(TXpower);
   Serial.print(F("dBm "));
@@ -285,11 +259,12 @@ void loop()
   Serial.println();
   delay(packet_delay);
 
-  LT.setSleep(CONFIGURATION_RETENTION);                        //preserve register settings in sleep.
+  LT.setSleep(CONFIGURATION_RETENTION);                        //preserve register settings in sleep.  
   Serial.println(F("Sleeping zzzzz...."));
   Serial.println();
   Serial.flush();
   digitalWrite(LED1, LOW);
+
   sleepNode(15);                                            //goto sleep for 15 seconds
   Serial.println(F("Awake !"));
   Serial.flush();
