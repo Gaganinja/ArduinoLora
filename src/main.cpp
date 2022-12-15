@@ -23,9 +23,11 @@
 
 #define Program_Version "V1.0"
 
+
 #include <avr/wdt.h>                 //watchdog timer library, integral to Arduino IDE
+#include <avr/sleep.h>
 #include <SPI.h>
-#include <LowPower.h>                //get the library here; https://github.com/rocketscream/Low-Power
+// #include <LowPower.h>                //get the library here; https://github.com/rocketscream/Low-Power
 
 #include <SX128XLT.h>
 #include "Settings.h"
@@ -35,18 +37,90 @@ SX128XLT LT;
 bool SendOK;
 int8_t TestPower;
 uint8_t TXPacketL;
+volatile byte sleep_cycles_remaining;
+// volatile bool wasInterrupted;
 
 
-void sleep1second(uint32_t sleeps)
+
+/************************ Sleep Mode ******************************************/
+
+#if defined ENABLE_SLEEP_MODE
+
+// void wakeUp()
+// {
+//     wasInterrupted = true;
+//     sleep_cycles_remaining = 0;
+// }
+
+ISR(WDT_vect)
 {
-  //uses the lowpower library
-  uint32_t index;
-
-  for (index = 1; index <= sleeps; index++)
-  {
-    LowPower.powerDown(SLEEP_1S, ADC_OFF, BOD_OFF);         //sleep in 1 second steps
-  }
+    --sleep_cycles_remaining;
 }
+
+void sleepNode(unsigned int cycles)
+{
+    sleep_cycles_remaining = cycles;
+    set_sleep_mode(SLEEP_MODE_PWR_DOWN); // sleep mode is set here
+    sleep_enable();
+    // if (interruptPin != 255) {
+    //     wasInterrupted = false; //Reset Flag
+    //     //LOW,CHANGE, FALLING, RISING correspond with the values 0,1,2,3 respectively
+    //     attachInterrupt(interruptPin, wakeUp, INTERRUPT_MODE);
+    //     //if(INTERRUPT_MODE==0) attachInterrupt(interruptPin,wakeUp, LOW);
+    //     //if(INTERRUPT_MODE==1) attachInterrupt(interruptPin,wakeUp, RISING);
+    //     //if(INTERRUPT_MODE==2) attachInterrupt(interruptPin,wakeUp, FALLING);
+    //     //if(INTERRUPT_MODE==3) attachInterrupt(interruptPin,wakeUp, CHANGE);
+    // }
+
+    #if defined(__AVR_ATtiny25__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__)
+    WDTCR |= _BV(WDIE);
+    #else
+    WDTCSR |= _BV(WDIE);
+    #endif
+
+    while (sleep_cycles_remaining) {
+        sleep_mode(); // System sleeps here
+    }                 // The WDT_vect interrupt wakes the MCU from here
+    sleep_disable();  // System continues execution here when watchdog timed out
+    // detachInterrupt(interruptPin);
+
+    #if defined(__AVR_ATtiny25__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__)
+    WDTCR &= ~_BV(WDIE);
+    #else
+    WDTCSR &= ~_BV(WDIE);
+    #endif
+    // return !wasInterrupted;
+}
+
+void setup_watchdog(uint8_t prescalar)
+{
+
+    uint8_t wdtcsr = prescalar & 7;
+    if (prescalar & 8)
+        wdtcsr |= _BV(WDP3);
+    MCUSR &= ~_BV(WDRF); // Clear the WD System Reset Flag
+
+    #if defined(__AVR_ATtiny25__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__)
+    WDTCR = _BV(WDCE) | _BV(WDE);           // Write the WD Change enable bit to enable changing the prescaler and enable system reset
+    WDTCR = _BV(WDCE) | wdtcsr | _BV(WDIE); // Write the prescalar bits (how long to sleep, enable the interrupt to wake the MCU
+    #else
+    WDTCSR = _BV(WDCE) | _BV(WDE);           // Write the WD Change enable bit to enable changing the prescaler and enable system reset
+    WDTCSR = _BV(WDCE) | wdtcsr | _BV(WDIE); // Write the prescalar bits (how long to sleep, enable the interrupt to wake the MCU
+    #endif
+}
+
+#endif // Enable sleep mode
+
+// void sleep1second(uint32_t sleeps)
+// {
+//   //uses the lowpower library
+//   uint32_t index;
+
+//   for (index = 1; index <= sleeps; index++)
+//   {
+//     LowPower.powerDown(SLEEP_1S, ADC_OFF, BOD_OFF);         //sleep in 1 second steps
+//   }
+// }
 
 
 void packet_is_OK()
@@ -156,6 +230,7 @@ void setup()
 {
   pinMode(LED1, OUTPUT);                        //setup pin as output for indicator LED
   led_Flash(2, 125);                            //two quick LED flashes to indicate program start
+  setup_watchdog(6);
 
   Serial.begin(9600);
   Serial.println();
@@ -188,6 +263,7 @@ void setup()
   Serial.print(F("Transmitter ready - TXBUFFER_SIZE "));
   Serial.println(TXBUFFER_SIZE);
   Serial.println();
+
 }
 
 void loop()
@@ -214,9 +290,7 @@ void loop()
   Serial.println();
   Serial.flush();
   digitalWrite(LED1, LOW);
-
-  sleep1second(15);                                            //goto sleep for 15 seconds
-
+  sleepNode(15);                                            //goto sleep for 15 seconds
   Serial.println(F("Awake !"));
   Serial.flush();
   digitalWrite(LED1, HIGH);
