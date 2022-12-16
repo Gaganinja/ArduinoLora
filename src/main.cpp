@@ -85,10 +85,12 @@ AirQuality aqs;
 
 struct payload_t {
   float tmp;
-  char sep1 = ';';
   float hum; 
-  char sep2 = ';';
   int aq; 
+
+  String toString(){
+    return String(tmp)+String(';')+String(hum)+String(';')+ String(aq);
+  }
 };
 
 bool SendOK;
@@ -117,47 +119,18 @@ void packet_is_Error()
   digitalWrite(LED1, LOW);                                  //this leaves the LED on slightly longer for a packet error
 }
 
-bool Send_Test_Packet1()
+bool Send_Data_Packet(payload_t p)
 {
-  uint8_t bufffersize;
+  uint8_t bufffersize = sizeof(p)+4;
 
-  uint8_t buff[] = "Before Device Sleep";
+  String msg = p.toString();
+  Serial.println(msg);
+  char buff[bufffersize];
+  msg.toCharArray(buff, bufffersize);
+  Serial.println(buff);
+  buff[bufffersize -1] = ' ';
   TXPacketL = sizeof(buff);
-  buff[TXPacketL - 1] = '*';
-
-  if (sizeof(buff) > TXBUFFER_SIZE)              //check that defined buffer is not larger than TX_BUFFER
-  {
-    bufffersize = TXBUFFER_SIZE;
-  }
-  else
-  {
-    bufffersize = sizeof(buff);
-  }
-
-  TXPacketL = bufffersize;
-
-  LT.printASCIIPacket( (uint8_t*) buff, bufffersize);
-  digitalWrite(LED1, HIGH);
-
-  if (LT.transmit( (uint8_t*) buff, TXPacketL, 10000, TXpower, WAIT_TX))
-  {
-    digitalWrite(LED1, LOW);
-    return true;
-  }
-  else
-  {
-    return false;
-  }
-}
-
-bool Send_Test_Packet2()
-{
-  uint8_t bufffersize;
-
-  uint8_t buff[] = "After Device Sleep";
-  TXPacketL = sizeof(buff);
-  buff[TXPacketL - 1] = '*';
-
+  
   if (sizeof(buff) > TXBUFFER_SIZE)              //check that defined buffer is not larger than TX_BUFFER
   {
     bufffersize = TXBUFFER_SIZE;
@@ -263,9 +236,9 @@ void loop()
   Serial.print(TXpower);
   Serial.print(F("dBm "));
   Serial.print(F("TestPacket1> "));
-  Serial.flush();
+  // Serial.flush();
 
-  if (Send_Test_Packet1())
+  if (Send_Data_Packet(payload))
   {
     packet_is_OK();
   }
@@ -294,17 +267,6 @@ void loop()
   Serial.print(F("dBm "));
   Serial.print(F("TestPacket2> "));
   Serial.flush();
-
-  if (Send_Test_Packet2())
-  {
-    packet_is_OK();
-  }
-  else
-  {
-    packet_is_Error();
-  }
-  Serial.println();
-  delay(packet_delay);
 }
 
 ISR(TIMER2_OVF_vect){
