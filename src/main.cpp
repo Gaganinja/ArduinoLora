@@ -1,44 +1,14 @@
-/*******************************************************************************************************
-  Programs for Arduino - Copyright of the author Stuart Robinson - 29/02/20
-
-  This program is supplied as is, it is up to the user of the program to decide if the program is
-  suitable for the intended purpose and free from errors.
-*******************************************************************************************************/
-
-/*******************************************************************************************************
-  Program Operation - This program tests the sleep mode and register retention of the lora device in sleep
-  mode, it assumes an Atmel ATMega328P processor is in use. The LoRa settings to use are specified in the
-  'Settings.h' file.
-
-  A packet is sent, containing the text 'Before Device Sleep' and the LoRa device and Atmel processor are put
-  to sleep. The processor watchdog timer should wakeup the processor in 15 seconds (approx) and register
-  values should be retained.  The device then attempts to transmit another packet 'After Device Sleep'
-  without re-loading all the LoRa settings. The receiver should see 'After Device Sleep' for the first
-  packet and 'After Device Sleep' for the second.
-
-  Tested on a 'bare bones' ATmega328P board, the current in sleep mode was 12.2uA.
-
-  Serial monitor baud rate is set at 9600.
-*******************************************************************************************************/
-
 #define Program_Version "V1.0"
-
-
-
+/************************ Include librairies *********************************/
 #include <SPI.h>
 #include "DHT.h"
-#include<AirQuality.h>
-
+#include <AirQuality.h>
 #include <avr/wdt.h>                 //watchdog timer library, integral to Arduino IDE
 #include <avr/sleep.h>
-// #include <LowPower.h>                //get the library here; https://github.com/rocketscream/Low-Power
-
 #include <SX128XLT.h>
 #include "Settings.h"
 
-
 /************************ Sleep Mode ******************************************/
-
 #if defined ENABLE_SLEEP_MODE
 
 volatile byte sleep_cycles_remaining;
@@ -76,9 +46,7 @@ void setup_watchdog(uint8_t prescalar)
 }
 #endif // Enable sleep mode
 
-/************************ End of Sleep Mode *********************************/
-
-
+/************************ Define global vars & objs *********************************/
 SX128XLT LT;  // Creating Lora Transmitter object
 DHT dht(DHTPIN, DHTTYPE);
 AirQuality aqs;
@@ -99,6 +67,7 @@ uint8_t TXPacketL;
 uint32_t qualityTime;
 volatile bool wakeUpFlag = false;
 
+/************************ Define LoRa communication functions *********************************/
 void packet_is_OK()
 {
   Serial.print(F(" "));
@@ -168,6 +137,7 @@ void led_Flash(uint16_t flashes, uint16_t delaymS)
   }
 }
 
+/************************ Define runtime Arduino functions *********************************/
 void setup()
 {
   Serial.begin(9600);
