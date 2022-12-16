@@ -27,7 +27,7 @@
 
 #include <SPI.h>
 #include "DHT.h"
-// #include<AirQuality.h>
+#include<AirQuality.h>
 
 #include <avr/wdt.h>                 //watchdog timer library, integral to Arduino IDE
 #include <avr/sleep.h>
@@ -81,11 +81,21 @@ void setup_watchdog(uint8_t prescalar)
 
 SX128XLT LT;  // Creating Lora Transmitter object
 DHT dht(DHTPIN, DHTTYPE);
+AirQuality aqs;
 
+struct payload_t {
+  float tmp;
+  char sep1 = ';';
+  float hum; 
+  char sep2 = ';';
+  int aq; 
+};
 
 bool SendOK;
 int8_t TestPower;
 uint8_t TXPacketL;
+uint32_t qualityTime;
+volatile bool wakeUpFlag = false;
 
 void packet_is_OK()
 {
@@ -93,7 +103,6 @@ void packet_is_OK()
   Serial.print(TXPacketL);
   Serial.print(F(" Bytes SentOK"));
 }
-
 
 void packet_is_Error()
 {
@@ -108,12 +117,11 @@ void packet_is_Error()
   digitalWrite(LED1, LOW);                                  //this leaves the LED on slightly longer for a packet error
 }
 
-
 bool Send_Test_Packet1()
 {
   uint8_t bufffersize;
 
-  uint8_t buff[] = "";
+  uint8_t buff[] = "Before Device Sleep";
   TXPacketL = sizeof(buff);
   buff[TXPacketL - 1] = '*';
 
@@ -141,7 +149,6 @@ bool Send_Test_Packet1()
     return false;
   }
 }
-
 
 bool Send_Test_Packet2()
 {
@@ -176,7 +183,6 @@ bool Send_Test_Packet2()
   }
 }
 
-
 void led_Flash(uint16_t flashes, uint16_t delaymS)
 {
   uint16_t index;
@@ -189,13 +195,8 @@ void led_Flash(uint16_t flashes, uint16_t delaymS)
   }
 }
 
-
 void setup()
 {
-  pinMode(LED1, OUTPUT);                        //setup pin as output for indicator LED
-  led_Flash(2, 125);                            //two quick LED flashes to indicate program start
-  setup_watchdog(6);
-
   Serial.begin(9600);
   Serial.println();
   Serial.print(__TIME__);
@@ -207,6 +208,18 @@ void setup()
 
   SPI.begin();
   dht.begin();
+  aqs.init(QUALITY_SENSOR);       //Initialisation du capteur Qualité de l'air
+
+ 
+  // initialisation première valeur du capteur qualité de l'air.
+  aqs.last_vol = aqs.first_vol;
+  aqs.first_vol = analogRead(QUALITY_SENSOR);
+  aqs.counter = 0;
+  aqs.timer_index = 1;
+
+  pinMode(LED1, OUTPUT);                        //setup pin as output for indicator LED
+  led_Flash(2, 125);                            //two quick LED flashes to indicate program start
+  setup_watchdog(6);
 
   if (LT.begin(NSS, NRESET, RFBUSY, DIO1, DIO2, DIO3, RX_EN, TX_EN, LORA_DEVICE))
   {
@@ -233,15 +246,19 @@ void setup()
 
 void loop()
 {
-  float tmp = dht.readTemperature(false ,true);
-  float hum = dht.readHumidity();
+  payload_t payload;
 
+  payload.tmp = dht.readTemperature(false ,true);
+  payload.hum = dht.readHumidity();
+  payload.aq = aqs.slope();
+  qualityTime = millis();
   Serial.print(F("TEMP : "));
-  Serial.print(tmp);
+  Serial.print(payload.tmp);
   Serial.print(F("\t HUM : "));
-  Serial.println(hum);
-
-
+  Serial.print(payload.hum);
+  Serial.print(F("\t AirQ : "));
+  Serial.println(payload.aq);
+    
   digitalWrite(LED1, HIGH);
   Serial.print(TXpower);
   Serial.print(F("dBm "));
@@ -265,7 +282,9 @@ void loop()
   Serial.flush();
   digitalWrite(LED1, LOW);
 
-  sleepNode(15);                                            //goto sleep for 15 seconds
+  sleepNode(SECONDS_SLEEPING);                                            //goto sleep for 15 seconds
+  
+  wakeUpFlag = true;
   Serial.println(F("Awake !"));
   Serial.flush();
   digitalWrite(LED1, HIGH);
@@ -286,4 +305,19 @@ void loop()
   }
   Serial.println();
   delay(packet_delay);
+}
+
+ISR(TIMER2_OVF_vect){
+  {
+    if(wakeUpFlag){ //set 2 seconds as a detected duty
+      wakeUpFlag = false;
+      aqs.last_vol=aqs.first_vol;
+      aqs.first_vol=analogRead(QUALITY_SENSOR);
+      aqs.counter=0;
+      aqs.timer_index=1;
+      PORTB=PORTB^0x20;
+    }else{
+      aqs.counter++; 
+    }
+  }
 }

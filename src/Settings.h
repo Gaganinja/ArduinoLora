@@ -14,6 +14,7 @@
 
 // ********* SLEEP SETTINGS *************
 #define ENABLE_SLEEP_MODE
+#define SECONDS_SLEEPING 15
 
 // ********* RADIO SETTINGS ***************
 #define NSS 7
